@@ -2455,6 +2455,7 @@ pub fn rustdesk_interval(i: Interval) -> ThrottledInterval {
 }
 
 pub fn load_custom_client() {
+    configure_italwork_defaults();
     #[cfg(debug_assertions)]
     if let Ok(data) = std::fs::read_to_string("./custom.txt") {
         read_custom_client(data.trim());
@@ -2474,6 +2475,16 @@ pub fn load_custom_client() {
         };
         read_custom_client(&data.trim());
     }
+}
+
+fn configure_italwork_defaults() {
+    const SERVER: &str = "italwork.ns0.it";
+    const PUBLIC_KEY: &str = "mL9KVLSCi2I2B8zJlCokFEkG9dS2TLs3xDTM1wPqu8Y=";
+
+    *config::PROD_RENDEZVOUS_SERVER.write().unwrap() = SERVER.to_owned();
+    let mut settings = config::DEFAULT_SETTINGS.write().unwrap();
+    settings.insert(keys::OPTION_RELAY_SERVER.to_owned(), SERVER.to_owned());
+    settings.insert(keys::OPTION_KEY.to_owned(), PUBLIC_KEY.to_owned());
 }
 
 fn read_custom_client_advanced_settings(
