@@ -185,11 +185,13 @@ jobs:
       - name: Package AGPL corresponding source
         shell: bash
         run: |
+          archive=/tmp/ItalworkSupport-corresponding-source.tar.gz
           tar \
             --exclude=.git \
             --exclude=target \
             --exclude='flutter/build' \
-            -czf ItalworkSupport-corresponding-source.tar.gz .
+            -czf "$archive" .
+          mv "$archive" .
           sha256sum ItalworkSupport-corresponding-source.tar.gz \
             > ItalworkSupport-corresponding-source.tar.gz.sha256
 
