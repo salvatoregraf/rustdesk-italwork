@@ -160,6 +160,20 @@ jobs:
           if ($LASTEXITCODE -ne 0 -or -not $version) {
             throw "ItalworkSupport.exe version check failed with exit code $LASTEXITCODE"
           }
+          $versionInfo = (Get-Item .\dist\ItalworkSupport.exe).VersionInfo
+          $expectedMetadata = @{
+            ProductName = 'Italwork Support'
+            FileDescription = 'Italwork Support'
+            CompanyName = 'Italwork S.r.l.'
+            LegalCopyright = '© 2026 Italwork S.r.l. Modifiche e branding. RustDesk OSS © rispettivi autori.'
+            OriginalFilename = 'ItalworkSupport.exe'
+          }
+          foreach ($entry in $expectedMetadata.GetEnumerator()) {
+            $actual = $versionInfo.($entry.Key)
+            if ($actual -ne $entry.Value) {
+              throw "Invalid $($entry.Key): expected '$($entry.Value)', got '$actual'"
+            }
+          }
           $hash = (Get-FileHash .\dist\ItalworkSupport.exe -Algorithm SHA256).Hash.ToLowerInvariant()
           Set-Content .\dist\ItalworkSupport.exe.sha256 "$hash  ItalworkSupport.exe"
           Write-Host "Built RustDesk version: $version"
