@@ -51,11 +51,26 @@ jobs:
         run: |
           $config = Get-Content .\src\common.rs -Raw
           foreach ($required in @(
+            'const APP_NAME: &str = "ItalworkSupport";',
+            '*config::APP_NAME.write().unwrap() = APP_NAME.to_owned();',
             'italwork.ns0.it',
             'mL9KVLSCi2I2B8zJlCokFEkG9dS2TLs3xDTM1wPqu8Y='
           )) {
             if (-not $config.Contains($required)) {
               throw "Missing expected Italwork value: $required"
+            }
+          }
+          $runner = Get-Content .\flutter\windows\runner\main.cpp -Raw
+          if (-not $runner.Contains('std::wstring app_name = L"ItalworkSupport";')) {
+            throw 'Windows runner fallback name is not ItalworkSupport'
+          }
+          $installer = Get-Content .\src\platform\windows.rs -Raw
+          foreach ($required in @(
+            'reg add {subkey} /f /v DisplayName /t REG_SZ /d "{app_name}"',
+            'format!("{}\\{}", pf, crate::get_app_name())'
+          )) {
+            if (-not $installer.Contains($required)) {
+              throw "Windows installer no longer derives branding from the application name: $required"
             }
           }
 
