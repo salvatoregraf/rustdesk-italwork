@@ -2478,9 +2478,11 @@ pub fn load_custom_client() {
 }
 
 fn configure_italwork_defaults() {
+    const APP_NAME: &str = "ItalworkSupport";
     const SERVER: &str = "italwork.ns0.it";
     const PUBLIC_KEY: &str = "mL9KVLSCi2I2B8zJlCokFEkG9dS2TLs3xDTM1wPqu8Y=";
 
+    *config::APP_NAME.write().unwrap() = APP_NAME.to_owned();
     *config::PROD_RENDEZVOUS_SERVER.write().unwrap() = SERVER.to_owned();
     let mut settings = config::DEFAULT_SETTINGS.write().unwrap();
     settings.insert(keys::OPTION_RELAY_SERVER.to_owned(), SERVER.to_owned());
