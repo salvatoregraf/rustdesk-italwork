@@ -228,7 +228,16 @@ jobs:
               --wait
             xcrun stapler staple "ItalworkSupport-macOS-${{ matrix.arch }}.dmg"
             codesign --verify --verbose=2 "ItalworkSupport-macOS-${{ matrix.arch }}.dmg"
-            xcrun stapler validate "ItalworkSupport-macOS-${{ matrix.arch }}.dmg"
+            for attempt in 1 2 3 4 5; do
+              if xcrun stapler validate "ItalworkSupport-macOS-${{ matrix.arch }}.dmg"; then
+                break
+              fi
+              if [[ "$attempt" == "5" ]]; then
+                echo "Stapler validation failed after $attempt attempts" >&2
+                exit 1
+              fi
+              sleep $((attempt * 10))
+            done
           fi
           shasum -a 256 "ItalworkSupport-macOS-${{ matrix.arch }}.dmg" \
             > "ItalworkSupport-macOS-${{ matrix.arch }}.dmg.sha256"
