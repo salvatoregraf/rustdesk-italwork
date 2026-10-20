@@ -27,7 +27,8 @@ windows = { version = "0.61", features = [
 native-windows-gui = {version = "1.0", default-features = false, features = ["animation-timer", "image-decoder"]}
 
 [package.metadata.winres]
-CompanyName = "Italwork S.r.l."\nLegalCopyright = "© 2026 Italwork S.r.l. Modifiche e branding. RustDesk OSS © rispettivi autori."
+CompanyName = "Italwork S.r.l."
+LegalCopyright = "© 2026 Italwork S.r.l. Modifiche e branding. RustDesk OSS © rispettivi autori."
 ProductName = "Italwork Support"
 OriginalFilename = "ItalworkSupport.exe"
 FileDescription = "Italwork Support"
