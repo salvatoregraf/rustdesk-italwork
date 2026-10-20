@@ -256,7 +256,8 @@ webrtc-util = { git = "https://github.com/rustdesk-org/webrtc", rev = "49c89bd8d
 webrtc-sctp = { git = "https://github.com/rustdesk-org/webrtc", rev = "49c89bd8d30e6e62e4c1a96cee38fdc11f79ef63" }
 
 [package.metadata.winres]
-CompanyName = "Italwork S.r.l."\nLegalCopyright = "© 2026 Italwork S.r.l. Modifiche e branding. RustDesk OSS © rispettivi autori."
+CompanyName = "Italwork S.r.l."
+LegalCopyright = "© 2026 Italwork S.r.l. Modifiche e branding. RustDesk OSS © rispettivi autori."
 ProductName = "Italwork Support"
 FileDescription = "Italwork Support"
 OriginalFilename = "ItalworkSupport.exe"
