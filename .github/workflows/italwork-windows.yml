@@ -67,7 +67,9 @@ jobs:
           $installer = Get-Content .\src\platform\windows.rs -Raw
           foreach ($required in @(
             'reg add {subkey} /f /v DisplayName /t REG_SZ /d \"{app_name}\"',
-            'format!("{}\\{}", pf, crate::get_app_name())'
+            'format!("{}\\{}", pf, crate::get_app_name())',
+            'let exe = format!("{}\\{}.exe", path, crate::get_app_name());',
+            'create_service=get_create_service(&exe)'
           )) {
             if (-not $installer.Contains($required)) {
               throw "Windows installer no longer derives branding from the application name: $required"
@@ -139,6 +141,13 @@ jobs:
         run: |
           python .\build.py --portable --flutter --skip-portable-pack --hwcodec --vram
           Move-Item .\flutter\build\windows\x64\runner\Release .\rustdesk
+          Move-Item .\rustdesk\rustdesk.exe .\rustdesk\ItalworkSupport.exe
+          if (Test-Path .\rustdesk\rustdesk.exe) {
+            throw 'The packaged client still contains rustdesk.exe'
+          }
+          if (-not (Test-Path .\rustdesk\ItalworkSupport.exe)) {
+            throw 'The packaged client is missing ItalworkSupport.exe'
+          }
 
       - name: Add virtual display support
         shell: pwsh
@@ -163,7 +172,7 @@ jobs:
           sed -i '/dpiAware/d' res/manifest.xml
           pushd libs/portable
           python -m pip install -r requirements.txt
-          python ./generate.py -f ../../rustdesk/ -o . -e ../../rustdesk/rustdesk.exe
+          python ./generate.py -f ../../rustdesk/ -o . -e ../../rustdesk/ItalworkSupport.exe
           popd
           mkdir -p dist
           mv target/release/rustdesk-portable-packer.exe dist/ItalworkSupport.exe
