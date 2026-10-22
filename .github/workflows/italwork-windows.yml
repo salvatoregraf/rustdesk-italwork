@@ -174,11 +174,11 @@ jobs:
             -Uri https://github.com/rustdesk/hbb_common/releases/download/driver/$adapterArchive `
             -OutFile $adapterArchive
           Invoke-WebRequest `
-            -Uri https://github.com/rustdesk/hbb_common/releases/download/driver/sha256s `
-            -OutFile sha256s
+            -Uri https://github.com/rustdesk/hbb_common/releases/download/driver/sha256sums `
+            -OutFile sha256sums
 
-          $driverMatch = Select-String -Path .\sha256s -Pattern '^([a-fA-F0-9]{64}) \*rustdesk_printer_driver_v4-1\.4\.zip$'
-          $adapterMatch = Select-String -Path .\sha256s -Pattern '^([a-fA-F0-9]{64}) \*printer_driver_adapter\.zip$'
+          $driverMatch = Select-String -Path .\sha256sums -Pattern '^([a-fA-F0-9]{64}) \*rustdesk_printer_driver_v4-1\.4\.zip$'
+          $adapterMatch = Select-String -Path .\sha256sums -Pattern '^([a-fA-F0-9]{64}) \*printer_driver_adapter\.zip$'
           if (-not $driverMatch -or -not $adapterMatch) {
             throw 'Printer driver checksums are missing from the official manifest'
           }
