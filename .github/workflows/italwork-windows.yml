@@ -53,6 +53,8 @@ jobs:
           foreach ($required in @(
             'const APP_NAME: &str = "ItalworkSupport";',
             '*config::APP_NAME.write().unwrap() = APP_NAME.to_owned();',
+            '"custom-rendezvous-server".to_owned(),',
+            'settings.insert(keys::OPTION_RELAY_SERVER.to_owned(), SERVER.to_owned());',
             'italwork.ns0.it',
             'mL9KVLSCi2I2B8zJlCokFEkG9dS2TLs3xDTM1wPqu8Y='
           )) {
