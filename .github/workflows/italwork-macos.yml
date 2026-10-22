@@ -46,16 +46,37 @@ jobs:
           submodules: recursive
           persist-credentials: false
 
-      - name: Validate Italwork defaults
+      - name: Validate Italwork defaults and branding
         shell: bash
         run: |
-          grep -F 'const APP_NAME: &str = "ItalworkSupport";' src/common.rs
-          grep -F '*config::APP_NAME.write().unwrap() = APP_NAME.to_owned();' src/common.rs
-          grep -F 'italwork.ns0.it' src/common.rs
-          grep -F 'mL9KVLSCi2I2B8zJlCokFEkG9dS2TLs3xDTM1wPqu8Y=' src/common.rs
-          grep -F "static const appName = 'Italwork Support';" flutter/lib/common/italwork_branding.dart
-          grep -F "static const licenseUrl = 'https://www.gnu.org/licenses/agpl-3.0.html';" flutter/lib/common/italwork_branding.dart
-          grep -F "'https://github.com/salvatoregraf/rustdesk-italwork';" flutter/lib/common/italwork_branding.dart
+          config=src/common.rs
+          branding=flutter/lib/common/italwork_branding.dart
+          settings=flutter/lib/desktop/pages/desktop_setting_page.dart
+          macos_platform=src/platform/macos.rs
+
+          grep -F 'const APP_NAME: &str = "ItalworkSupport";' "$config"
+          grep -F '*config::APP_NAME.write().unwrap() = APP_NAME.to_owned();' "$config"
+          grep -F '"custom-rendezvous-server".to_owned(),' "$config"
+          grep -F 'settings.insert(keys::OPTION_RELAY_SERVER.to_owned(), SERVER.to_owned());' "$config"
+          grep -F 'const SERVER: &str = "italwork.ns0.it";' "$config"
+          grep -F 'const PUBLIC_KEY: &str = "mL9KVLSCi2I2B8zJlCokFEkG9dS2TLs3xDTM1wPqu8Y=";' "$config"
+
+          grep -F "static const appName = 'Italwork Support';" "$branding"
+          grep -F "Copyright © 2026 Italwork S.r.l. Modifiche e branding." "$branding"
+          grep -F "Basato su RustDesk OSS © rispettivi autori." "$branding"
+          grep -F "static const licenseUrl = 'https://www.gnu.org/licenses/agpl-3.0.html';" "$branding"
+          grep -F "'https://github.com/salvatoregraf/rustdesk-italwork';" "$branding"
+          grep -F 'ItalworkBranding.appName' "$settings"
+          grep -F 'ItalworkBranding.copyright' "$settings"
+          grep -F 'ItalworkBranding.attribution' "$settings"
+          grep -F "translate('Version')" "$settings"
+          grep -F 'launchUrlString(ItalworkBranding.licenseUrl)' "$settings"
+          grep -F 'launchUrlString(ItalworkBranding.sourceUrl)' "$settings"
+
+          # The macOS service installer rewrites the embedded upstream templates
+          # from the runtime application name and the signed bundle identifier.
+          grep -F 's = s.replace("RustDesk", &crate::get_app_name());' "$macos_platform"
+          grep -F 'arg(&format!("/Applications/{}.app", crate::get_app_name()))' "$macos_platform"
 
       - name: Validate Apple signing secrets
         if: inputs.sign_and_notarize
@@ -160,30 +181,47 @@ jobs:
           fi
           ./build.py --flutter --hwcodec --unix-file-copy-paste --screencapturekit
 
-      - name: Apply Italwork branding
+      - name: Apply Italwork branding and bundle metadata
         shell: bash
         run: |
           product_dir="flutter/build/macos/Build/Products/Release"
-          mv "$product_dir/RustDesk.app" "$product_dir/ItalworkSupport.app"
           app="$product_dir/ItalworkSupport.app"
+          copyright='© 2026 Italwork S.r.l. Modifiche e branding. RustDesk OSS © rispettivi autori.'
+
+          mv "$product_dir/RustDesk.app" "$app"
           mv "$app/Contents/MacOS/RustDesk" "$app/Contents/MacOS/ItalworkSupport"
           plist="$app/Contents/Info.plist"
+
           /usr/libexec/PlistBuddy -c 'Set :CFBundleName ItalworkSupport' "$plist" || \
             /usr/libexec/PlistBuddy -c 'Add :CFBundleName string ItalworkSupport' "$plist"
           /usr/libexec/PlistBuddy -c 'Set :CFBundleDisplayName ItalworkSupport' "$plist" || \
             /usr/libexec/PlistBuddy -c 'Add :CFBundleDisplayName string ItalworkSupport' "$plist"
           /usr/libexec/PlistBuddy -c 'Set :CFBundleExecutable ItalworkSupport' "$plist"
+          /usr/libexec/PlistBuddy -c 'Set :CFBundleIdentifier com.italwork.italworksupport' "$plist"
+          /usr/libexec/PlistBuddy -c "Set :NSHumanReadableCopyright $copyright" "$plist"
+          /usr/libexec/PlistBuddy -c 'Set :CFBundleURLTypes:0:CFBundleURLName com.italwork.italworksupport' "$plist"
+          /usr/libexec/PlistBuddy -c 'Set :CFBundleURLTypes:0:CFBundleURLSchemes:0 italworksupport' "$plist"
+          /usr/libexec/PlistBuddy -c 'Add :CFBundleURLTypes:0:CFBundleURLSchemes:1 string rustdesk' "$plist"
 
-      - name: Verify application version
+      - name: Verify application metadata and version
         shell: bash
         run: |
           app="flutter/build/macos/Build/Products/Release/ItalworkSupport.app"
           plist="$app/Contents/Info.plist"
+          expected_copyright='© 2026 Italwork S.r.l. Modifiche e branding. RustDesk OSS © rispettivi autori.'
+
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleName' "$plist")" = "ItalworkSupport"
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleDisplayName' "$plist")" = "ItalworkSupport"
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$plist")" = "ItalworkSupport"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$plist")" = "com.italwork.italworksupport"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :NSHumanReadableCopyright' "$plist")" = "$expected_copyright"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleURLTypes:0:CFBundleURLName' "$plist")" = "com.italwork.italworksupport"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleURLTypes:0:CFBundleURLSchemes:0' "$plist")" = "italworksupport"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleURLTypes:0:CFBundleURLSchemes:1' "$plist")" = "rustdesk"
+          test -n "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$plist")"
           test -x "$app/Contents/MacOS/ItalworkSupport"
           test ! -e "$app/Contents/MacOS/RustDesk"
+
           version="$("$app/Contents/MacOS/ItalworkSupport" --version)"
           test -n "$version"
           echo "Built ItalworkSupport version: $version"
