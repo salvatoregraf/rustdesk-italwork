@@ -2485,6 +2485,10 @@ fn configure_italwork_defaults() {
     *config::APP_NAME.write().unwrap() = APP_NAME.to_owned();
     *config::PROD_RENDEZVOUS_SERVER.write().unwrap() = SERVER.to_owned();
     let mut settings = config::DEFAULT_SETTINGS.write().unwrap();
+    settings.insert(
+        "custom-rendezvous-server".to_owned(),
+        SERVER.to_owned(),
+    );
     settings.insert(keys::OPTION_RELAY_SERVER.to_owned(), SERVER.to_owned());
     settings.insert(keys::OPTION_KEY.to_owned(), PUBLIC_KEY.to_owned());
 }
