@@ -1,0 +1,322 @@
+name: Build ItalworkSupport macOS Intel x64
+
+on:
+  workflow_dispatch:
+    inputs:
+      sign_and_notarize:
+        description: Sign and notarize with the configured Apple secrets
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+env:
+  MAC_RUST_VERSION: "1.81"
+  FLUTTER_VERSION: "3.24.5"
+  VCPKG_COMMIT_ID: "9e593bb18ea69cc5095e012465dcd675a822ed0d"
+  VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
+  MACOS_P12_BASE64: "${{ secrets.MACOS_P12_BASE64 }}"
+
+jobs:
+  generate-bridge:
+    uses: ./.github/workflows/bridge.yml
+
+  build-macos:
+    name: macOS Intel x64
+    needs: generate-bridge
+    timeout-minutes: 180
+    runs-on: macos-15-intel
+    env:
+      TARGET: x86_64-apple-darwin
+      VCPKG_TRIPLET: x64-osx
+
+    steps:
+      - name: Export GitHub Actions cache environment
+        uses: actions/github-script@d7906e4ad0b1822421a7e6a35d5ca353c962f410 # v6
+        with:
+          script: |
+            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+
+      - name: Checkout modified OSS source
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Validate Italwork defaults and branding
+        shell: bash
+        run: |
+          config=src/common.rs
+          branding=flutter/lib/common/italwork_branding.dart
+          settings=flutter/lib/desktop/pages/desktop_setting_page.dart
+          macos_platform=src/platform/macos.rs
+
+          grep -F 'const APP_NAME: &str = "ItalworkSupport";' "$config"
+          grep -F '*config::APP_NAME.write().unwrap() = APP_NAME.to_owned();' "$config"
+          grep -F '"custom-rendezvous-server".to_owned(),' "$config"
+          grep -F 'settings.insert(keys::OPTION_RELAY_SERVER.to_owned(), SERVER.to_owned());' "$config"
+          grep -F 'const SERVER: &str = "italwork.ns0.it";' "$config"
+          grep -F 'const PUBLIC_KEY: &str = "mL9KVLSCi2I2B8zJlCokFEkG9dS2TLs3xDTM1wPqu8Y=";' "$config"
+
+          grep -F "static const appName = 'Italwork Support';" "$branding"
+          grep -F "Copyright © 2026 Italwork S.r.l. Modifiche e branding." "$branding"
+          grep -F "Basato su RustDesk OSS © rispettivi autori." "$branding"
+          grep -F "static const licenseUrl = 'https://www.gnu.org/licenses/agpl-3.0.html';" "$branding"
+          grep -F "'https://github.com/salvatoregraf/rustdesk-italwork';" "$branding"
+          grep -F 'ItalworkBranding.appName' "$settings"
+          grep -F 'ItalworkBranding.copyright' "$settings"
+          grep -F 'ItalworkBranding.attribution' "$settings"
+          grep -F "translate('Version')" "$settings"
+          grep -F 'launchUrlString(ItalworkBranding.licenseUrl)' "$settings"
+          grep -F 'launchUrlString(ItalworkBranding.sourceUrl)' "$settings"
+
+          # The macOS service installer rewrites the embedded upstream templates
+          # from the runtime application name and the signed bundle identifier.
+          grep -F 's = s.replace("RustDesk", &crate::get_app_name());' "$macos_platform"
+          grep -F 'arg(&format!("/Applications/{}.app", crate::get_app_name()))' "$macos_platform"
+
+      - name: Validate Apple signing secrets
+        if: inputs.sign_and_notarize
+        shell: bash
+        env:
+          P12_PASSWORD: ${{ secrets.MACOS_P12_PASSWORD }}
+          CODESIGN_IDENTITY: ${{ secrets.MACOS_CODESIGN_IDENTITY }}
+          API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+          API_KEY_P8_BASE64: ${{ secrets.APPLE_API_KEY_P8_BASE64 }}
+        run: |
+          test -n "$MACOS_P12_BASE64" || { echo '::error::Missing MACOS_P12_BASE64'; exit 1; }
+          test -n "$P12_PASSWORD" || { echo '::error::Missing MACOS_P12_PASSWORD'; exit 1; }
+          test -n "$CODESIGN_IDENTITY" || { echo '::error::Missing MACOS_CODESIGN_IDENTITY'; exit 1; }
+          test -n "$API_KEY_ID" || { echo '::error::Missing APPLE_API_KEY_ID'; exit 1; }
+          test -n "$API_ISSUER_ID" || { echo '::error::Missing APPLE_API_ISSUER_ID'; exit 1; }
+          test -n "$API_KEY_P8_BASE64" || { echo '::error::Missing APPLE_API_KEY_P8_BASE64'; exit 1; }
+
+      - name: Import Apple Developer ID certificate
+        if: inputs.sign_and_notarize
+        uses: apple-actions/import-codesign-certs@253ddeeac23f2bdad1646faac5c8c2832e800071 # v1
+        with:
+          p12-file-base64: ${{ secrets.MACOS_P12_BASE64 }}
+          p12-password: ${{ secrets.MACOS_P12_PASSWORD }}
+          keychain: italwork
+
+      - name: Import notarization credentials
+        if: inputs.sign_and_notarize
+        uses: timheuer/base64-to-file@adaa40c0c581f276132199d4cf60afa07ce60eac # v1.2
+        with:
+          fileName: AuthKey.p8
+          fileDir: ${{ github.workspace }}
+          encodedString: ${{ secrets.APPLE_API_KEY_P8_BASE64 }}
+
+      - name: Install build tools
+        shell: bash
+        run: |
+          brew install llvm create-dmg
+          command -v pkg-config >/dev/null || brew install pkg-config
+          curl --fail --location --silent --show-error \
+            https://www.nasm.us/pub/nasm/releasebuilds/2.16.03/macosx/nasm-2.16.03-macosx.zip \
+            --output nasm.zip
+          unzip -q nasm.zip
+          sudo install nasm-2.16.03/nasm /usr/local/bin/nasm
+
+      - name: Install Flutter
+        uses: subosito/flutter-action@2783a3f08e1baf891508463f8c6653c258246225 # v2.12.0
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+
+      - name: Patch Flutter
+        shell: bash
+        run: |
+          flutter_root="$(dirname "$(dirname "$(which flutter)")")"
+          cd "$flutter_root"
+          git apply "$GITHUB_WORKSPACE/.github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff"
+          sed -i -e 's/_setFramesEnabledState(false);/\/\/_setFramesEnabledState(false);/g' \
+            packages/flutter/lib/src/scheduler/binding.dart
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
+        with:
+          toolchain: ${{ env.MAC_RUST_VERSION }}
+          targets: ${{ env.TARGET }}
+          components: rustfmt
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        with:
+          prefix-key: italwork-macos-x86_64
+
+      - name: Restore generated Rust/Flutter bridge
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: bridge-artifact
+          path: ./
+
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@b1a0dd252f06b9e25b3c022a9a03bd7a427fb6a2 # v11
+        with:
+          vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
+          doNotCache: false
+
+      - name: Install native dependencies
+        shell: bash
+        run: |
+          "$VCPKG_ROOT/vcpkg" install \
+            --triplet "${{ env.VCPKG_TRIPLET }}" \
+            --x-install-root="$VCPKG_ROOT/installed"
+
+      - name: Build ItalworkSupport
+        shell: bash
+        run: |
+          if [[ "${{ env.TARGET }}" == "aarch64-apple-darwin" ]]; then
+            min_version="12.3"
+            sed -i -e "s/MACOSX_DEPLOYMENT_TARGET=[0-9]*\.[0-9]*/MACOSX_DEPLOYMENT_TARGET=${min_version}/" build.py
+            sed -i -e "s/platform :osx, '.*'/platform :osx, '${min_version}'/" flutter/macos/Podfile
+            sed -i -e "s/osx_minimum_system_version = \"[0-9]*\.[0-9]*\"/osx_minimum_system_version = \"${min_version}\"/" Cargo.toml
+            sed -i -e "s/MACOSX_DEPLOYMENT_TARGET = [0-9]*\.[0-9]*;/MACOSX_DEPLOYMENT_TARGET = ${min_version};/" flutter/macos/Runner.xcodeproj/project.pbxproj
+            export MACOSX_DEPLOYMENT_TARGET="$min_version"
+          fi
+          ./build.py --flutter --hwcodec --unix-file-copy-paste --screencapturekit
+
+      - name: Apply Italwork branding and bundle metadata
+        shell: bash
+        run: |
+          product_dir="flutter/build/macos/Build/Products/Release"
+          app="$product_dir/ItalworkSupport.app"
+          copyright='© 2026 Italwork S.r.l. Modifiche e branding. RustDesk OSS © rispettivi autori.'
+
+          mv "$product_dir/RustDesk.app" "$app"
+          mv "$app/Contents/MacOS/RustDesk" "$app/Contents/MacOS/ItalworkSupport"
+          plist="$app/Contents/Info.plist"
+
+          /usr/libexec/PlistBuddy -c 'Set :CFBundleName ItalworkSupport' "$plist" || \
+            /usr/libexec/PlistBuddy -c 'Add :CFBundleName string ItalworkSupport' "$plist"
+          /usr/libexec/PlistBuddy -c 'Set :CFBundleDisplayName ItalworkSupport' "$plist" || \
+            /usr/libexec/PlistBuddy -c 'Add :CFBundleDisplayName string ItalworkSupport' "$plist"
+          /usr/libexec/PlistBuddy -c 'Set :CFBundleExecutable ItalworkSupport' "$plist"
+          /usr/libexec/PlistBuddy -c 'Set :CFBundleIdentifier com.italwork.italworksupport' "$plist"
+          /usr/libexec/PlistBuddy -c "Set :NSHumanReadableCopyright $copyright" "$plist"
+          /usr/libexec/PlistBuddy -c 'Set :CFBundleURLTypes:0:CFBundleURLName com.italwork.italworksupport' "$plist"
+          /usr/libexec/PlistBuddy -c 'Set :CFBundleURLTypes:0:CFBundleURLSchemes:0 italworksupport' "$plist"
+          /usr/libexec/PlistBuddy -c 'Add :CFBundleURLTypes:0:CFBundleURLSchemes:1 string rustdesk' "$plist"
+
+      - name: Verify application metadata and version
+        shell: bash
+        run: |
+          app="flutter/build/macos/Build/Products/Release/ItalworkSupport.app"
+          plist="$app/Contents/Info.plist"
+          expected_copyright='© 2026 Italwork S.r.l. Modifiche e branding. RustDesk OSS © rispettivi autori.'
+
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleName' "$plist")" = "ItalworkSupport"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleDisplayName' "$plist")" = "ItalworkSupport"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$plist")" = "ItalworkSupport"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$plist")" = "com.italwork.italworksupport"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :NSHumanReadableCopyright' "$plist")" = "$expected_copyright"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleURLTypes:0:CFBundleURLName' "$plist")" = "com.italwork.italworksupport"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleURLTypes:0:CFBundleURLSchemes:0' "$plist")" = "italworksupport"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleURLTypes:0:CFBundleURLSchemes:1' "$plist")" = "rustdesk"
+          test -n "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$plist")"
+          test -x "$app/Contents/MacOS/ItalworkSupport"
+          test ! -e "$app/Contents/MacOS/RustDesk"
+
+          version="$("$app/Contents/MacOS/ItalworkSupport" --version)"
+          test -n "$version"
+          echo "Built ItalworkSupport version: $version"
+
+      - name: Sign application
+        if: inputs.sign_and_notarize
+        shell: bash
+        env:
+          P12_PASSWORD: ${{ secrets.MACOS_P12_PASSWORD }}
+          CODESIGN_IDENTITY: ${{ secrets.MACOS_CODESIGN_IDENTITY }}
+        run: |
+          security default-keychain -s italwork.keychain
+          security unlock-keychain -p "$P12_PASSWORD" italwork.keychain
+          bash ./.github/scripts/sign-macos-app.sh \
+            ./flutter/build/macos/Build/Products/Release/ItalworkSupport.app \
+            "$CODESIGN_IDENTITY" \
+            ./flutter/macos/Runner/Release.entitlements
+          codesign --verify --deep --strict --verbose=2 \
+            ./flutter/build/macos/Build/Products/Release/ItalworkSupport.app
+
+      - name: Create, sign and notarize DMG
+        shell: bash
+        env:
+          CODESIGN_IDENTITY: ${{ secrets.MACOS_CODESIGN_IDENTITY }}
+          API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+        run: |
+          create-dmg \
+            --volname "ItalworkSupport" \
+            --icon "ItalworkSupport.app" 200 190 \
+            --hide-extension "ItalworkSupport.app" \
+            --window-size 800 400 \
+            --app-drop-link 600 185 \
+            "ItalworkSupport-macOS-x86_64.dmg" \
+            ./flutter/build/macos/Build/Products/Release/ItalworkSupport.app
+          if [[ "${{ inputs.sign_and_notarize }}" == "true" ]]; then
+            codesign --force --options runtime \
+              --sign "$CODESIGN_IDENTITY" \
+              "ItalworkSupport-macOS-x86_64.dmg"
+            xcrun notarytool submit \
+              "ItalworkSupport-macOS-x86_64.dmg" \
+              --key "$GITHUB_WORKSPACE/AuthKey.p8" \
+              --key-id "$API_KEY_ID" \
+              --issuer "$API_ISSUER_ID" \
+              --wait
+            xcrun stapler staple "ItalworkSupport-macOS-x86_64.dmg"
+            codesign --verify --verbose=2 "ItalworkSupport-macOS-x86_64.dmg"
+            for attempt in 1 2 3 4 5; do
+              if xcrun stapler validate "ItalworkSupport-macOS-x86_64.dmg"; then
+                break
+              fi
+              if [[ "$attempt" == "5" ]]; then
+                echo "Stapler validation failed after $attempt attempts" >&2
+                exit 1
+              fi
+              sleep $((attempt * 10))
+            done
+          fi
+          shasum -a 256 "ItalworkSupport-macOS-x86_64.dmg" \
+            > "ItalworkSupport-macOS-x86_64.dmg.sha256"
+
+      - name: Upload macOS package
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ItalworkSupport-macOS-x86_64
+          path: |
+            ItalworkSupport-macOS-x86_64.dmg
+            ItalworkSupport-macOS-x86_64.dmg.sha256
+          if-no-files-found: error
+          retention-days: 30
+
+  package-corresponding-source:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout modified OSS source
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Package AGPL corresponding source
+        shell: bash
+        run: |
+          archive="$RUNNER_TEMP/ItalworkSupport-corresponding-source.tar.gz"
+          tar --exclude=.git --exclude=target --exclude='flutter/build' -czf "$archive" .
+          mv "$archive" .
+          shasum -a 256 ItalworkSupport-corresponding-source.tar.gz \
+            > ItalworkSupport-corresponding-source.tar.gz.sha256
+
+      - name: Upload corresponding source
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ItalworkSupport-macOS-x86_64-corresponding-source
+          path: |
+            ItalworkSupport-corresponding-source.tar.gz
+            ItalworkSupport-corresponding-source.tar.gz.sha256
+          if-no-files-found: error
+          retention-days: 30
