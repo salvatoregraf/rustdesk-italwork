@@ -8,10 +8,10 @@ import 'package:flutter_hbb/desktop/pages/desktop_setting_page.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import 'package:settings_ui/settings_ui.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 
 import '../../common.dart';
+import '../../common/italwork_branding.dart';
 import '../../common/widgets/dialog.dart';
 import '../../common/widgets/login.dart';
 import '../../consts.dart';
@@ -37,8 +37,6 @@ class SettingsPage extends StatefulWidget implements PageShape {
   @override
   State<SettingsPage> createState() => _SettingsState();
 }
-
-const url = 'https://rustdesk.com/';
 
 enum KeepScreenOn {
   never,
@@ -1041,16 +1039,16 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
             tiles: enhancementsTiles,
           ),
         SettingsSection(
-          title: Text(translate("About")),
+          title: Text('${translate("About")} ${ItalworkBranding.appName}'),
           tiles: [
             SettingsTile(
                 onPressed: (context) async {
-                  await launchUrl(Uri.parse(url));
+                  await launchUrlString(ItalworkBranding.sourceUrl);
                 },
                 title: Text(translate("Version: ") + version),
                 value: Padding(
                   padding: EdgeInsets.symmetric(vertical: 8),
-                  child: Text('rustdesk.com',
+                  child: Text(ItalworkBranding.appName,
                       style: TextStyle(
                         decoration: TextDecoration.underline,
                       )),
@@ -1081,11 +1079,21 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
                 ),
                 leading: Icon(Icons.perm_identity)),
             SettingsTile(
-              title: Text(translate("Privacy Statement")),
-              onPressed: (context) =>
-                  launchUrlString('https://rustdesk.com/privacy.html'),
-              leading: Icon(Icons.privacy_tip),
-            )
+                title: Text(ItalworkBranding.copyright),
+                leading: Icon(Icons.business)),
+            SettingsTile(
+                title: Text(ItalworkBranding.attribution),
+                leading: Icon(Icons.code)),
+            SettingsTile(
+                title: Text(ItalworkBranding.licenseName),
+                onPressed: (context) =>
+                    launchUrlString(ItalworkBranding.licenseUrl),
+                leading: Icon(Icons.description)),
+            SettingsTile(
+                title: Text(ItalworkBranding.sourceName),
+                onPressed: (context) =>
+                    launchUrlString(ItalworkBranding.sourceUrl),
+                leading: Icon(Icons.source)),
           ],
         ),
       ],
@@ -1191,17 +1199,29 @@ void showThemeSettings(OverlayDialogManager dialogManager) async {
 void showAbout(OverlayDialogManager dialogManager) {
   dialogManager.show((setState, close, context) {
     return CustomAlertDialog(
-      title: Text(translate('About RustDesk')),
+      title: Text('${translate('About')} ${ItalworkBranding.appName}'),
       content: Wrap(direction: Axis.vertical, spacing: 12, children: [
         Text('Version: $version'),
+        Text(ItalworkBranding.copyright),
+        Text(ItalworkBranding.attribution),
         InkWell(
             onTap: () async {
-              const url = 'https://rustdesk.com/';
-              await launchUrl(Uri.parse(url));
+              await launchUrlString(ItalworkBranding.licenseUrl);
             },
             child: Padding(
               padding: EdgeInsets.symmetric(vertical: 8),
-              child: Text('rustdesk.com',
+              child: Text(ItalworkBranding.licenseName,
+                  style: TextStyle(
+                    decoration: TextDecoration.underline,
+                  )),
+            )),
+        InkWell(
+            onTap: () async {
+              await launchUrlString(ItalworkBranding.sourceUrl);
+            },
+            child: Padding(
+              padding: EdgeInsets.symmetric(vertical: 8),
+              child: Text(ItalworkBranding.sourceName,
                   style: TextStyle(
                     decoration: TextDecoration.underline,
                   )),
